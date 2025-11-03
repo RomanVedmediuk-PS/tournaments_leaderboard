@@ -13,6 +13,19 @@
         <header class="header">
             <h1><i class="fas fa-trophy"></i> Tournament Leaderboard</h1>
             <p class="subtitle" id="tournamentTitle">Battle Tournament - Loading...</p>
+            
+            <div class="date-selector">
+                <label for="dateSelect" class="date-label">
+                    <i class="fas fa-calendar-alt"></i>
+                    View Date:
+                </label>
+                <select id="dateSelect" class="date-select">
+                    <option value="latest">Latest Available</option>
+                </select>
+                <button id="refreshDates" class="refresh-dates-btn" title="Refresh available dates">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
         </header>
 
         <div class="leaderboard-container">

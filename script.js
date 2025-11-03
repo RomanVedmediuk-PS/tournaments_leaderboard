@@ -16,17 +16,19 @@ class TournamentLeaderboard {
         this.dataUrl = null; // Will be determined dynamically
         this.currentDate = null;
         this.tournamentFolder = null;
+        this.availableDates = [];
+        this.selectedDate = 'latest';
         this.init();
     }
 
     async init() {
         this.showLoading(true);
         try {
-            // First, discover the latest tournament and standings file
+            // First, discover the latest tournament and all available dates
             await this.discoverLatestTournament();
-            await this.discoverLatestFile();
-            const data = await this.fetchLeaderboardData();
-            this.renderLeaderboard(data);
+            await this.discoverAllAvailableDates();
+            this.setupDateSelector();
+            await this.loadDataForSelectedDate();
         } catch (error) {
             console.error('Failed to fetch data:', error);
             this.showError(true);
@@ -71,7 +73,7 @@ class TournamentLeaderboard {
         }
     }
 
-    async discoverLatestFile() {
+    async discoverAllAvailableDates() {
         try {
             const response = await fetch(this.apiUrl);
             if (!response.ok) {
@@ -80,27 +82,51 @@ class TournamentLeaderboard {
             
             const files = await response.json();
             
-            // Filter for standings files and find the latest one
-            const standingsFiles = files
+            // Filter for standings files and extract all dates
+            this.availableDates = files
                 .filter(file => file.name.startsWith('standings_') && file.name.endsWith('.md'))
                 .map(file => ({
                     name: file.name,
-                    date: this.extractDateFromFilename(file.name)
+                    date: this.extractDateFromFilename(file.name),
+                    displayDate: this.formatDisplayDate(this.extractDateFromFilename(file.name))
                 }))
                 .filter(file => file.date) // Only files with valid dates
                 .sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort by date, newest first
             
-            if (standingsFiles.length > 0) {
-                const latestFile = standingsFiles[0];
-                this.dataUrl = `${this.baseUrl}/${latestFile.name}`;
-                this.currentDate = latestFile.date;
-                console.log(`Using latest standings file: ${latestFile.name} (${latestFile.date})`);
-            } else {
+            if (this.availableDates.length === 0) {
                 throw new Error('No standings files found in the tournament folder');
             }
+            
+            console.log(`Found ${this.availableDates.length} available dates:`, this.availableDates);
         } catch (error) {
-            console.warn('Failed to discover latest standings file:', error);
+            console.warn('Failed to discover available dates:', error);
             throw new Error('Could not find any tournament standings data');
+        }
+    }
+
+    async loadDataForSelectedDate() {
+        try {
+            let targetDate;
+            
+            if (this.selectedDate === 'latest' && this.availableDates.length > 0) {
+                targetDate = this.availableDates[0];
+            } else {
+                targetDate = this.availableDates.find(d => d.date === this.selectedDate);
+            }
+            
+            if (!targetDate) {
+                throw new Error('Selected date not found');
+            }
+            
+            this.dataUrl = `${this.baseUrl}/${targetDate.name}`;
+            this.currentDate = targetDate.date;
+            console.log(`Loading data for: ${targetDate.name} (${targetDate.date})`);
+            
+            const data = await this.fetchLeaderboardData();
+            this.renderLeaderboard(data);
+        } catch (error) {
+            console.error('Failed to load data for selected date:', error);
+            throw error;
         }
     }
 
@@ -112,6 +138,88 @@ class TournamentLeaderboard {
             return match[1].replace(/_/g, '-');
         }
         return null;
+    }
+
+    formatDisplayDate(dateString) {
+        if (!dateString) return 'Unknown Date';
+        
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+    }
+
+    setupDateSelector() {
+        const dateSelect = document.getElementById('dateSelect');
+        const refreshBtn = document.getElementById('refreshDates');
+        
+        // Clear existing options except the first one
+        while (dateSelect.children.length > 1) {
+            dateSelect.removeChild(dateSelect.lastChild);
+        }
+        
+        // Populate with available dates
+        this.availableDates.forEach(dateInfo => {
+            const option = document.createElement('option');
+            option.value = dateInfo.date;
+            option.textContent = dateInfo.displayDate;
+            if (dateInfo.date === this.currentDate) {
+                option.selected = true;
+            }
+            dateSelect.appendChild(option);
+        });
+        
+        // Add event listeners
+        dateSelect.addEventListener('change', async (event) => {
+            this.selectedDate = event.target.value;
+            await this.handleDateChange();
+        });
+        
+        refreshBtn.addEventListener('click', async () => {
+            await this.refreshAvailableDates();
+        });
+    }
+
+    async handleDateChange() {
+        this.showLoading(true);
+        try {
+            await this.loadDataForSelectedDate();
+        } catch (error) {
+            console.error('Failed to load data for selected date:', error);
+            this.showError(true);
+            this.renderEmptyLeaderboard();
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    async refreshAvailableDates() {
+        const refreshBtn = document.getElementById('refreshDates');
+        const originalHTML = refreshBtn.innerHTML;
+        
+        try {
+            refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            refreshBtn.disabled = true;
+            
+            await this.discoverLatestTournament();
+            await this.discoverAllAvailableDates();
+            this.setupDateSelector();
+            
+            // If current selection is no longer available, switch to latest
+            const dateSelect = document.getElementById('dateSelect');
+            if (!this.availableDates.find(d => d.date === this.selectedDate)) {
+                this.selectedDate = 'latest';
+                dateSelect.value = 'latest';
+                await this.loadDataForSelectedDate();
+            }
+        } catch (error) {
+            console.error('Failed to refresh dates:', error);
+        } finally {
+            refreshBtn.innerHTML = originalHTML;
+            refreshBtn.disabled = false;
+        }
     }
 
     extractDateFromFilename(filename) {
@@ -363,7 +471,19 @@ class TournamentLeaderboard {
 
     // Method to refresh data
     async refresh() {
-        await this.init();
+        this.showLoading(true);
+        try {
+            await this.discoverLatestTournament();
+            await this.discoverAllAvailableDates();
+            this.setupDateSelector();
+            await this.loadDataForSelectedDate();
+        } catch (error) {
+            console.error('Failed to refresh data:', error);
+            this.showError(true);
+            this.renderEmptyLeaderboard();
+        } finally {
+            this.showLoading(false);
+        }
     }
 }
 

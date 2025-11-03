@@ -8,11 +8,40 @@ Visit the live site: [https://romanvedmediuk-ps.github.io/tournaments_leaderboar
 
 ## Features
 
-- Real-time tournament leaderboard display
-- Responsive design that works on all devices
-- Loading states and error handling
-- Clean, modern interface with trophy icons
-- Tournament title and player statistics
+- **🔄 Smart Auto-discovery** of latest tournament folders and standings files
+- **📅 Historical Data Access** - browse and view tournament standings from any previous date
+- **📡 Real-time data fetching** from GitHub repository with robust error handling
+- **📱 Fully responsive design** that works on desktop, tablet, and mobile
+- **🎨 Modern UI** with beautiful styling, animations, and empty states
+- **🚫 No Stale Data** - shows empty state instead of outdated fallback information
+- **⏰ Auto-refresh** functionality (every 5 minutes) with date preservation
+- **🏅 Medal icons** for top 3 players with special styling
+- **🔗 Dynamic links** to player detail pages (adapts to tournament folder)
+- **📊 Smart score formatting** (K for thousands, M for millions)
+- **🎯 Flexible Configuration** - easily adaptable to different repositories and tournaments
+- **🔍 Date Navigation** - intuitive dropdown to select and view historical tournament data
+
+## Historical Data Navigation
+
+The website now includes powerful historical data browsing capabilities:
+
+### **Date Selector**
+- **Dropdown Menu**: Select from all available tournament dates
+- **"Latest Available" Option**: Always shows the most recent data
+- **Refresh Button**: Updates the available dates list
+- **Automatic Discovery**: Finds all `standings_YYYY_MM_DD.md` files
+
+### **Smart Data Loading**
+- **Dynamic URL Building**: Automatically constructs URLs for selected dates
+- **Preserved State**: Selected date persists during auto-refresh cycles
+- **Error Recovery**: Falls back gracefully if selected date becomes unavailable
+- **Fast Switching**: Instant navigation between different tournament dates
+
+### **User Experience**
+- **Intuitive Interface**: Calendar icon and clear date formatting
+- **Responsive Design**: Works seamlessly on all device sizes
+- **Loading Feedback**: Visual indicators during date changes
+- **Keyboard Accessible**: Full keyboard navigation support
 
 ## Technologies Used
 
@@ -21,6 +50,7 @@ Visit the live site: [https://romanvedmediuk-ps.github.io/tournaments_leaderboar
 - JavaScript (ES6+)
 - Font Awesome icons
 - Google Fonts (Inter)
+- GitHub API for dynamic content discovery
 
 ## Local Development
 
