@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tournament Leaderboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1><i class="fas fa-trophy"></i> Tournament Leaderboard</h1>
+            <p class="subtitle" id="tournamentTitle">Battle Tournament - Loading...</p>
+        </header>
+
+        <div class="leaderboard-container">
+            <div class="loading" id="loading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Loading leaderboard...</span>
+            </div>
+            
+            <div class="error-message" id="error" style="display: none;">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>Failed to load leaderboard data. Showing cached data.</span>
+            </div>
+
+            <div class="leaderboard" id="leaderboard" style="display: none;">
+                <div class="leaderboard-header">
+                    <div class="rank-col">Rank</div>
+                    <div class="name-col">Player</div>
+                    <div class="score-col">Score</div>
+                    <div class="action-col">Details</div>
+                </div>
+                
+                <div class="leaderboard-body" id="leaderboardBody">
+                    <!-- Leaderboard entries will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <footer class="footer">
+            <p>Last updated: <span id="lastUpdated">2025-11-28</span></p>
+            <p>Data source: <a href="https://github.com/RomanVedmediuk-PS/tournaments_data" target="_blank">tournaments_data repository</a></p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
