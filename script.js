@@ -18,6 +18,7 @@ class TournamentLeaderboard {
         this.tournamentFolder = null;
         this.availableDates = [];
         this.selectedDate = 'latest';
+        this.currentView = 'podium'; // 'podium' or 'table'
         this.init();
     }
 
@@ -301,18 +302,15 @@ class TournamentLeaderboard {
     }
 
     renderLeaderboard(data) {
-        const leaderboardBody = document.getElementById('leaderboardBody');
         const leaderboard = document.getElementById('leaderboard');
-        
-        leaderboardBody.innerHTML = '';
         
         if (data.length === 0) {
             this.renderEmptyState();
         } else {
-            data.forEach((player, index) => {
-                const entry = this.createLeaderboardEntry(player, index);
-                leaderboardBody.appendChild(entry);
-            });
+            // Render both views
+            this.renderPodiumView(data);
+            this.renderTableView(data);
+            this.setupViewToggle();
         }
         
         leaderboard.style.display = 'block';
@@ -320,21 +318,165 @@ class TournamentLeaderboard {
         this.updateTournamentTitle();
     }
 
+    renderPodiumView(data) {
+        const podiumContainer = document.getElementById('podiumContainer');
+        podiumContainer.innerHTML = '';
+        
+        // Sort players by rank and take top 4 for podium display
+        const topPlayers = data.slice(0, 4);
+        
+        if (topPlayers.length === 0) return;
+        
+        // Calculate relative heights based on scores
+        const maxScore = Math.max(...topPlayers.map(p => p.score));
+        
+        topPlayers.forEach((player, index) => {
+            const column = this.createPodiumColumn(player, maxScore);
+            podiumContainer.appendChild(column);
+        });
+    }
+
+    renderTableView(data) {
+        const leaderboardBody = document.getElementById('leaderboardBody');
+        leaderboardBody.innerHTML = '';
+        
+        data.forEach((player, index) => {
+            const entry = this.createLeaderboardEntry(player, index);
+            leaderboardBody.appendChild(entry);
+        });
+    }
+
+    createPodiumColumn(player, maxScore) {
+        const column = document.createElement('div');
+        column.className = `podium-column position-${player.rank}`;
+        
+        // Calculate height based on score relative to max score
+        const relativeScore = player.score / maxScore;
+        const minBlocks = 4;
+        const maxBlocks = 15;
+        
+        // Ensure winner has the tallest column, then scale others proportionally
+        let blockCount;
+        if (player.rank === 1) {
+            blockCount = maxBlocks;
+        } else {
+            blockCount = Math.max(minBlocks, Math.floor(relativeScore * maxBlocks));
+        }
+        
+        // Create Tetris tetromino layers with cascading animation
+        const blocksContainer = document.createElement('div');
+        blocksContainer.className = 'podium-blocks';
+        
+        for (let i = 0; i < blockCount; i++) {
+            const layer = this.createTetrisLayer(player.rank);
+            
+            // Tetris-like falling animation - layers fall from top and stack
+            const fallDelay = (blockCount - i - 1) * 0.2 + player.rank * 0.1;
+            layer.style.animationDelay = `${fallDelay}s`;
+            
+            // Add slight random rotation variation for more realistic Tetris feel
+            const randomRotation = (Math.random() - 0.5) * 8; // -4 to +4 degrees
+            layer.style.setProperty('--random-rotation', `${randomRotation}deg`);
+            
+            blocksContainer.appendChild(layer);
+        }
+        
+        // Create avatar with profile picture
+        const avatar = document.createElement('div');
+        avatar.className = 'podium-avatar';
+        
+        // Create profile image
+        const profileImg = document.createElement('img');
+        profileImg.className = 'profile-image';
+        profileImg.src = `https://github.com/${player.name}.png?size=64`;
+        profileImg.alt = player.name;
+        profileImg.onerror = function() {
+            // Fallback to GitHub's default avatar if user image fails
+            this.src = 'https://github.com/identicons/' + encodeURIComponent(player.name) + '.png';
+        };
+        
+        avatar.appendChild(profileImg);
+        
+        // Create crown for winner
+        if (player.rank === 1) {
+            const crown = document.createElement('div');
+            crown.className = 'crown';
+            crown.innerHTML = '<i class="fas fa-crown"></i>';
+            column.appendChild(crown);
+        }
+        
+        // Create rank indicator
+        const rankIndicator = document.createElement('div');
+        rankIndicator.className = 'podium-rank';
+        rankIndicator.textContent = player.rank;
+        
+        // Create info section
+        const info = document.createElement('div');
+        info.className = 'podium-info';
+        info.innerHTML = `
+            <div class="podium-score">${this.formatScore(player.score)}</div>
+            <div class="podium-name">${this.escapeHtml(player.name)}</div>
+        `;
+        
+        // Assemble column
+        column.appendChild(avatar);
+        column.appendChild(blocksContainer);
+        column.appendChild(info);
+        column.appendChild(rankIndicator);
+        
+        return column;
+    }
+
+    setupViewToggle() {
+        const podiumBtn = document.getElementById('podiumViewBtn');
+        const tableBtn = document.getElementById('tableViewBtn');
+        const podiumContainer = document.getElementById('podiumContainer');
+        const tableView = document.getElementById('tableView');
+        
+        // Set initial view
+        if (this.currentView === 'podium') {
+            podiumContainer.style.display = 'flex';
+            tableView.style.display = 'none';
+            podiumBtn.classList.add('active');
+            tableBtn.classList.remove('active');
+        } else {
+            podiumContainer.style.display = 'none';
+            tableView.style.display = 'block';
+            podiumBtn.classList.remove('active');
+            tableBtn.classList.add('active');
+        }
+        
+        // Add event listeners
+        podiumBtn.addEventListener('click', () => {
+            this.currentView = 'podium';
+            podiumContainer.style.display = 'flex';
+            tableView.style.display = 'none';
+            podiumBtn.classList.add('active');
+            tableBtn.classList.remove('active');
+        });
+        
+        tableBtn.addEventListener('click', () => {
+            this.currentView = 'table';
+            podiumContainer.style.display = 'none';
+            tableView.style.display = 'block';
+            podiumBtn.classList.remove('active');
+            tableBtn.classList.add('active');
+        });
+    }
+
     renderEmptyLeaderboard() {
         const leaderboard = document.getElementById('leaderboard');
-        const leaderboardBody = document.getElementById('leaderboardBody');
         
-        leaderboardBody.innerHTML = '';
         this.renderEmptyState();
         leaderboard.style.display = 'block';
         this.updateTournamentTitle();
     }
 
     renderEmptyState() {
+        const podiumContainer = document.getElementById('podiumContainer');
         const leaderboardBody = document.getElementById('leaderboardBody');
-        const emptyState = document.createElement('div');
-        emptyState.className = 'empty-state';
-        emptyState.innerHTML = `
+        
+        const emptyStateHTML = `
             <div class="empty-state-content">
                 <i class="fas fa-trophy empty-icon"></i>
                 <h3>No Tournament Data Available</h3>
@@ -345,7 +487,23 @@ class TournamentLeaderboard {
                 </button>
             </div>
         `;
-        leaderboardBody.appendChild(emptyState);
+        
+        // Show empty state in podium view
+        const podiumEmptyState = document.createElement('div');
+        podiumEmptyState.className = 'empty-state';
+        podiumEmptyState.innerHTML = emptyStateHTML;
+        podiumContainer.innerHTML = '';
+        podiumContainer.appendChild(podiumEmptyState);
+        
+        // Show empty state in table view
+        const tableEmptyState = document.createElement('div');
+        tableEmptyState.className = 'empty-state';
+        tableEmptyState.innerHTML = emptyStateHTML;
+        leaderboardBody.innerHTML = '';
+        leaderboardBody.appendChild(tableEmptyState);
+        
+        // Setup view toggle even for empty state
+        this.setupViewToggle();
     }
 
     updateTournamentTitle() {
@@ -420,6 +578,32 @@ class TournamentLeaderboard {
         } else {
             return score.toLocaleString();
         }
+    }
+
+    createTetrisLayer(position) {
+        const layer = document.createElement('div');
+        layer.className = 'tetris-layer';
+        
+        // Define 2-block wide Tetris tetromino patterns - ALL SOLID (no empty spaces)
+        const tetrominos = [
+            [1, 1], // O-piece (solid 2x1 block)
+            [1, 1], // I-piece horizontal (solid 2-block line)
+            [1, 1], // Solid tetromino piece
+            [1, 1], // Another solid piece
+            [1, 1], // Full 2-block coverage
+        ];
+        
+        // All patterns are solid, so just use [1, 1] for consistent fill
+        const pattern = [1, 1]; // Always solid - no empty spaces
+        
+        // Create blocks based on the pattern (exactly 2 solid blocks)
+        for (let i = 0; i < 2; i++) {
+            const block = document.createElement('div');
+            block.className = 'tetris-block'; // Always solid block
+            layer.appendChild(block);
+        }
+        
+        return layer;
     }
 
     escapeHtml(unsafe) {

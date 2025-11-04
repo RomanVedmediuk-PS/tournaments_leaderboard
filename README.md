@@ -8,18 +8,41 @@ Visit the live site: [https://romanvedmediuk-ps.github.io/tournaments_leaderboar
 
 ## Features
 
-- **🔄 Smart Auto-discovery** of latest tournament folders and standings files
+- **🏆 Podium Visualization** - stunning 3D podium-style leaderboard with animated blocks
+- **👑 Winner Crown** - special crown animation and effects for the tournament champion
+- **🔄 Dual View Modes** - toggle between podium visualization and traditional table view
 - **📅 Historical Data Access** - browse and view tournament standings from any previous date
 - **📡 Real-time data fetching** from GitHub repository with robust error handling
-- **📱 Fully responsive design** that works on desktop, tablet, and mobile
+- **📱 Fully responsive design** - works beautifully on desktop, tablet, and mobile
 - **🎨 Modern UI** with beautiful styling, animations, and empty states
 - **🚫 No Stale Data** - shows empty state instead of outdated fallback information
 - **⏰ Auto-refresh** functionality (every 5 minutes) with date preservation
-- **🏅 Medal icons** for top 3 players with special styling
+- **🏅 Color-coded positions** - unique colors for each ranking position
 - **🔗 Dynamic links** to player detail pages (adapts to tournament folder)
 - **📊 Smart score formatting** (K for thousands, M for millions)
 - **🎯 Flexible Configuration** - easily adaptable to different repositories and tournaments
 - **🔍 Date Navigation** - intuitive dropdown to select and view historical tournament data
+- **✨ Smooth Animations** - engaging slide-in effects and block animations
+
+## Podium Visualization
+
+Experience tournament standings like never before with our interactive 3D podium:
+
+### **Visual Elements**
+- **Animated Blocks**: Colored building blocks that grow to represent player scores
+- **Winner's Crown**: Special golden crown with bounce animation for 1st place
+- **Player Avatars**: Circular profile pictures with initials above each podium
+- **Color Coding**: 
+  - 🥇 **1st Place**: Blue blocks with crown
+  - 🥈 **2nd Place**: Green blocks  
+  - 🥉 **3rd Place**: Red blocks
+  - **4th Place**: Yellow blocks
+
+### **Interactive Features**
+- **Height Scaling**: Block heights automatically scale based on relative scores
+- **Shine Effects**: Subtle light animations across the blocks
+- **View Toggle**: Switch between podium and traditional table views
+- **Responsive Design**: Adapts beautifully to all screen sizes
 
 ## Historical Data Navigation
 
