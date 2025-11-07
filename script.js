@@ -4,21 +4,23 @@ class TournamentLeaderboard {
         // Configuration
         this.config = {
             repo: 'RomanVedmediuk-PS/tournaments_data',
-            year: '2025',
-            tournament: 'battle_2025_11_28'
+            group: 'group',
+            tournament: 'winterchampionship2025'
         };
         
         // Build URLs dynamically
-        this.baseUrl = `https://raw.githubusercontent.com/${this.config.repo}/main/${this.config.year}/${this.config.tournament}`;
-        this.apiUrl = `https://api.github.com/repos/${this.config.repo}/contents/${this.config.year}/${this.config.tournament}`;
-        this.repoApiUrl = `https://api.github.com/repos/${this.config.repo}/contents/${this.config.year}`;
+        this.baseUrl = `https://raw.githubusercontent.com/${this.config.repo}/main/${this.config.group}/${this.config.tournament}`;
+        this.apiUrl = `https://api.github.com/repos/${this.config.repo}/contents/${this.config.group}/${this.config.tournament}`;
+        this.repoApiUrl = `https://api.github.com/repos/${this.config.repo}/contents/${this.config.group}`;
         
         this.dataUrl = null; // Will be determined dynamically
         this.currentDate = null;
+        this.currentTimestamp = null;
         this.tournamentFolder = null;
         this.availableDates = [];
+        this.availableTimestamps = []; // New: track timestamps for selected date
         this.selectedDate = 'latest';
-        this.currentView = 'podium'; // 'podium' or 'table'
+        this.selectedTimestamp = 'latest';
         this.init();
     }
 
@@ -29,7 +31,7 @@ class TournamentLeaderboard {
             await this.discoverLatestTournament();
             await this.discoverAllAvailableDates();
             this.setupDateSelector();
-            await this.loadDataForSelectedDate();
+            await this.loadDataForSelectedDateTime();
         } catch (error) {
             console.error('Failed to fetch data:', error);
             this.showError(true);
@@ -48,29 +50,31 @@ class TournamentLeaderboard {
             
             const folders = await response.json();
             
-            // Filter for tournament folders (battle_YYYY_MM_DD pattern)
+            // Filter for tournament folders (any folder in the group directory)
             const tournamentFolders = folders
-                .filter(folder => folder.type === 'dir' && folder.name.startsWith('battle_'))
+                .filter(folder => folder.type === 'dir')
                 .map(folder => ({
                     name: folder.name,
-                    date: this.extractDateFromFolderName(folder.name)
+                    // For now, use the folder name as identifier
+                    date: folder.name
                 }))
-                .filter(folder => folder.date) // Only folders with valid dates
-                .sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort by date, newest first
+                .sort((a, b) => b.name.localeCompare(a.name)); // Sort alphabetically, newest first
             
             if (tournamentFolders.length > 0) {
                 const latestTournament = tournamentFolders[0];
                 this.tournamentFolder = latestTournament.name;
                 // Update URLs to use the discovered tournament
-                this.baseUrl = `https://raw.githubusercontent.com/${this.config.repo}/main/${this.config.year}/${this.tournamentFolder}`;
-                this.apiUrl = `https://api.github.com/repos/${this.config.repo}/contents/${this.config.year}/${this.tournamentFolder}`;
-                console.log(`Using latest tournament folder: ${this.tournamentFolder} (${latestTournament.date})`);
+                this.baseUrl = `https://raw.githubusercontent.com/${this.config.repo}/main/${this.config.group}/${this.tournamentFolder}`;
+                this.apiUrl = `https://api.github.com/repos/${this.config.repo}/contents/${this.config.group}/${this.tournamentFolder}`;
+                console.log(`Using latest tournament folder: ${this.tournamentFolder}`);
             } else {
                 console.log('No tournament folders found, using configured tournament');
+                this.tournamentFolder = this.config.tournament;
             }
         } catch (error) {
             console.warn('Failed to discover latest tournament via API:', error);
             // Continue with configured tournament
+            this.tournamentFolder = this.config.tournament;
         }
     }
 
@@ -81,18 +85,67 @@ class TournamentLeaderboard {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             
-            const files = await response.json();
+            const dateFolders = await response.json();
             
-            // Filter for standings files and extract all dates
-            this.availableDates = files
-                .filter(file => file.name.startsWith('standings_') && file.name.endsWith('.md'))
-                .map(file => ({
-                    name: file.name,
-                    date: this.extractDateFromFilename(file.name),
-                    displayDate: this.formatDisplayDate(this.extractDateFromFilename(file.name))
-                }))
-                .filter(file => file.date) // Only files with valid dates
-                .sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort by date, newest first
+            // Filter for date folders (YYYY-MM-DD pattern)
+            const validDateFolders = dateFolders
+                .filter(folder => folder.type === 'dir' && folder.name.match(/^\d{4}-\d{2}-\d{2}$/))
+                .sort((a, b) => b.name.localeCompare(a.name)); // Sort by date, newest first
+            
+            this.availableDates = [];
+            
+            // For each date folder, find ALL timestamp folders inside
+            for (const dateFolder of validDateFolders) {
+                try {
+                    const timestampResponse = await fetch(`${this.apiUrl}/${dateFolder.name}`);
+                    if (timestampResponse.ok) {
+                        const timestampFolders = await timestampResponse.json();
+                        
+                        // Find ALL timestamp folders and look for standings.md
+                        const validTimestamps = timestampFolders
+                            .filter(folder => folder.type === 'dir' && folder.name.match(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$/))
+                            .sort((a, b) => b.name.localeCompare(a.name)); // Sort by timestamp, newest first
+                        
+                        const timestampsWithStandings = [];
+                        
+                        // Check each timestamp for standings.md
+                        for (const timestampFolder of validTimestamps) {
+                            try {
+                                const standingsResponse = await fetch(`${this.apiUrl}/${dateFolder.name}/${timestampFolder.name}`);
+                                if (standingsResponse.ok) {
+                                    const standingsFiles = await standingsResponse.json();
+                                    const hasStandings = standingsFiles.some(file => 
+                                        file.type === 'file' && file.name === 'standings.md'
+                                    );
+                                    
+                                    if (hasStandings) {
+                                        timestampsWithStandings.push({
+                                            name: timestampFolder.name,
+                                            displayTime: this.formatTimestamp(timestampFolder.name),
+                                            fullPath: `${dateFolder.name}/${timestampFolder.name}/standings.md`
+                                        });
+                                    }
+                                }
+                            } catch (error) {
+                                console.warn(`Failed to check timestamp folder ${timestampFolder.name}:`, error);
+                            }
+                        }
+                        
+                        // Only add date if it has timestamps with standings
+                        if (timestampsWithStandings.length > 0) {
+                            this.availableDates.push({
+                                name: dateFolder.name,
+                                date: dateFolder.name,
+                                displayDate: this.formatDisplayDate(dateFolder.name),
+                                timestamps: timestampsWithStandings,
+                                latestTimestamp: timestampsWithStandings[0] // First one is latest due to sorting
+                            });
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`Failed to check date folder ${dateFolder.name}:`, error);
+                }
+            }
             
             if (this.availableDates.length === 0) {
                 throw new Error('No standings files found in the tournament folder');
@@ -105,51 +158,47 @@ class TournamentLeaderboard {
         }
     }
 
-    async loadDataForSelectedDate() {
-        try {
-            let targetDate;
-            
-            if (this.selectedDate === 'latest' && this.availableDates.length > 0) {
-                targetDate = this.availableDates[0];
-            } else {
-                targetDate = this.availableDates.find(d => d.date === this.selectedDate);
-            }
-            
-            if (!targetDate) {
-                throw new Error('Selected date not found');
-            }
-            
-            this.dataUrl = `${this.baseUrl}/${targetDate.name}`;
-            this.currentDate = targetDate.date;
-            console.log(`Loading data for: ${targetDate.name} (${targetDate.date})`);
-            
-            const data = await this.fetchLeaderboardData();
-            this.renderLeaderboard(data);
-        } catch (error) {
-            console.error('Failed to load data for selected date:', error);
-            throw error;
-        }
-    }
-
     extractDateFromFolderName(folderName) {
-        // Extract date from folder name like "battle_2025_11_28"
-        const match = folderName.match(/battle_(\d{4}_\d{2}_\d{2})$/);
-        if (match) {
-            // Convert from YYYY_MM_DD to YYYY-MM-DD
-            return match[1].replace(/_/g, '-');
-        }
-        return null;
+        // Extract date from folder name like "winterchampionship2025" or date folders
+        // For the new structure, this is mainly used for tournament discovery
+        return folderName;
     }
 
-    formatDisplayDate(dateString) {
+    formatDisplayDate(dateString, timestampString = null) {
         if (!dateString) return 'Unknown Date';
         
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
+        try {
+            const date = new Date(dateString);
+            let displayText = date.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            
+            // Add timestamp if available
+            if (timestampString) {
+                const timeMatch = timestampString.match(/\d{4}-\d{2}-\d{2}_(\d{2})-(\d{2})-(\d{2})$/);
+                if (timeMatch) {
+                    const [, hours, minutes, seconds] = timeMatch;
+                    displayText += ` at ${hours}:${minutes}:${seconds}`;
+                }
+            }
+            
+            return displayText;
+        } catch (error) {
+            return dateString;
+        }
+    }
+
+    formatTimestamp(timestampString) {
+        if (!timestampString) return 'Unknown Time';
+        
+        const timeMatch = timestampString.match(/\d{4}-\d{2}-\d{2}_(\d{2})-(\d{2})-(\d{2})$/);
+        if (timeMatch) {
+            const [, hours, minutes, seconds] = timeMatch;
+            return `${hours}:${minutes}:${seconds}`;
+        }
+        return timestampString;
     }
 
     setupDateSelector() {
@@ -172,6 +221,9 @@ class TournamentLeaderboard {
             dateSelect.appendChild(option);
         });
         
+        // Setup timestamp selector for the current date
+        this.setupTimestampSelector();
+        
         // Add event listeners
         dateSelect.addEventListener('change', async (event) => {
             this.selectedDate = event.target.value;
@@ -183,16 +235,119 @@ class TournamentLeaderboard {
         });
     }
 
+    setupTimestampSelector() {
+        // Check if timestamp selector exists, if not create it
+        let timestampSelect = document.getElementById('timestampSelect');
+        if (!timestampSelect) {
+            // Create timestamp selector container
+            const timestampContainer = document.createElement('div');
+            timestampContainer.className = 'controls-group';
+            timestampContainer.innerHTML = `
+                <label for="timestampSelect">Time:</label>
+                <select id="timestampSelect">
+                    <option value="latest">Latest</option>
+                </select>
+            `;
+            
+            // Insert after date selector
+            const dateContainer = document.querySelector('.controls-group');
+            if (dateContainer && dateContainer.parentNode) {
+                dateContainer.parentNode.insertBefore(timestampContainer, dateContainer.nextSibling);
+            }
+            
+            timestampSelect = document.getElementById('timestampSelect');
+        }
+        
+        // Clear existing options except the first one
+        while (timestampSelect.children.length > 1) {
+            timestampSelect.removeChild(timestampSelect.lastChild);
+        }
+        
+        // Find timestamps for the selected date
+        const selectedDateInfo = this.availableDates.find(d => 
+            this.selectedDate === 'latest' ? d === this.availableDates[0] : d.date === this.selectedDate
+        );
+        
+        if (selectedDateInfo && selectedDateInfo.timestamps) {
+            this.availableTimestamps = selectedDateInfo.timestamps;
+            
+            // Populate timestamp options
+            selectedDateInfo.timestamps.forEach(timestampInfo => {
+                const option = document.createElement('option');
+                option.value = timestampInfo.name;
+                option.textContent = timestampInfo.displayTime;
+                if (timestampInfo.name === this.currentTimestamp) {
+                    option.selected = true;
+                }
+                timestampSelect.appendChild(option);
+            });
+        } else {
+            this.availableTimestamps = [];
+        }
+        
+        // Add event listener for timestamp changes
+        timestampSelect.removeEventListener('change', this.handleTimestampChange);
+        timestampSelect.addEventListener('change', (event) => this.handleTimestampChange(event));
+    }
+
+    async handleTimestampChange(event) {
+        this.selectedTimestamp = event.target.value;
+        await this.loadDataForSelectedDateTime();
+    }
+
     async handleDateChange() {
         this.showLoading(true);
         try {
-            await this.loadDataForSelectedDate();
+            // Reset timestamp selection when date changes
+            this.selectedTimestamp = 'latest';
+            this.setupTimestampSelector();
+            await this.loadDataForSelectedDateTime();
         } catch (error) {
             console.error('Failed to load data for selected date:', error);
             this.showError(true);
             this.renderEmptyLeaderboard();
         } finally {
             this.showLoading(false);
+        }
+    }
+
+    async loadDataForSelectedDateTime() {
+        try {
+            // Get the selected date info
+            let selectedDateInfo;
+            if (this.selectedDate === 'latest' && this.availableDates.length > 0) {
+                selectedDateInfo = this.availableDates[0];
+            } else {
+                selectedDateInfo = this.availableDates.find(d => d.date === this.selectedDate);
+            }
+            
+            if (!selectedDateInfo) {
+                throw new Error('Selected date not found');
+            }
+            
+            // Get the selected timestamp info
+            let selectedTimestampInfo;
+            if (this.selectedTimestamp === 'latest' && selectedDateInfo.timestamps.length > 0) {
+                selectedTimestampInfo = selectedDateInfo.timestamps[0];
+            } else {
+                selectedTimestampInfo = selectedDateInfo.timestamps.find(t => t.name === this.selectedTimestamp);
+            }
+            
+            if (!selectedTimestampInfo) {
+                throw new Error('Selected timestamp not found');
+            }
+            
+            this.dataUrl = `${this.baseUrl}/${selectedTimestampInfo.fullPath}`;
+            this.currentDate = selectedDateInfo.date;
+            this.currentTimestamp = selectedTimestampInfo.name;
+            
+            console.log(`Loading data for: ${selectedTimestampInfo.fullPath} (${selectedDateInfo.date} at ${selectedTimestampInfo.displayTime})`);
+            
+            const data = await this.fetchLeaderboardData();
+            this.renderLeaderboard(data);
+        } catch (error) {
+            console.error('Failed to load data for selected date and timestamp:', error);
+            throw error;
         }
     }
 
@@ -212,8 +367,9 @@ class TournamentLeaderboard {
             const dateSelect = document.getElementById('dateSelect');
             if (!this.availableDates.find(d => d.date === this.selectedDate)) {
                 this.selectedDate = 'latest';
+                this.selectedTimestamp = 'latest';
                 dateSelect.value = 'latest';
-                await this.loadDataForSelectedDate();
+                await this.loadDataForSelectedDateTime();
             }
         } catch (error) {
             console.error('Failed to refresh dates:', error);
@@ -221,16 +377,6 @@ class TournamentLeaderboard {
             refreshBtn.innerHTML = originalHTML;
             refreshBtn.disabled = false;
         }
-    }
-
-    extractDateFromFilename(filename) {
-        // Extract date from filename like "standings_2025_11_30.md"
-        const match = filename.match(/standings_(\d{4}_\d{2}_\d{2})\.md/);
-        if (match) {
-            // Convert from YYYY_MM_DD to YYYY-MM-DD
-            return match[1].replace(/_/g, '-');
-        }
-        return null;
     }
 
     async fetchLeaderboardData() {
@@ -307,10 +453,8 @@ class TournamentLeaderboard {
         if (data.length === 0) {
             this.renderEmptyState();
         } else {
-            // Render both views
+            // Render only podium view
             this.renderPodiumView(data);
-            this.renderTableView(data);
-            this.setupViewToggle();
         }
         
         leaderboard.style.display = 'block';
@@ -333,16 +477,6 @@ class TournamentLeaderboard {
         topPlayers.forEach((player, index) => {
             const column = this.createPodiumColumn(player, maxScore);
             podiumContainer.appendChild(column);
-        });
-    }
-
-    renderTableView(data) {
-        const leaderboardBody = document.getElementById('leaderboardBody');
-        leaderboardBody.innerHTML = '';
-        
-        data.forEach((player, index) => {
-            const entry = this.createLeaderboardEntry(player, index);
-            leaderboardBody.appendChild(entry);
         });
     }
 
@@ -427,43 +561,6 @@ class TournamentLeaderboard {
         return column;
     }
 
-    setupViewToggle() {
-        const podiumBtn = document.getElementById('podiumViewBtn');
-        const tableBtn = document.getElementById('tableViewBtn');
-        const podiumContainer = document.getElementById('podiumContainer');
-        const tableView = document.getElementById('tableView');
-        
-        // Set initial view
-        if (this.currentView === 'podium') {
-            podiumContainer.style.display = 'flex';
-            tableView.style.display = 'none';
-            podiumBtn.classList.add('active');
-            tableBtn.classList.remove('active');
-        } else {
-            podiumContainer.style.display = 'none';
-            tableView.style.display = 'block';
-            podiumBtn.classList.remove('active');
-            tableBtn.classList.add('active');
-        }
-        
-        // Add event listeners
-        podiumBtn.addEventListener('click', () => {
-            this.currentView = 'podium';
-            podiumContainer.style.display = 'flex';
-            tableView.style.display = 'none';
-            podiumBtn.classList.add('active');
-            tableBtn.classList.remove('active');
-        });
-        
-        tableBtn.addEventListener('click', () => {
-            this.currentView = 'table';
-            podiumContainer.style.display = 'none';
-            tableView.style.display = 'block';
-            podiumBtn.classList.remove('active');
-            tableBtn.classList.add('active');
-        });
-    }
-
     renderEmptyLeaderboard() {
         const leaderboard = document.getElementById('leaderboard');
         
@@ -474,7 +571,6 @@ class TournamentLeaderboard {
 
     renderEmptyState() {
         const podiumContainer = document.getElementById('podiumContainer');
-        const leaderboardBody = document.getElementById('leaderboardBody');
         
         const emptyStateHTML = `
             <div class="empty-state-content">
@@ -488,22 +584,12 @@ class TournamentLeaderboard {
             </div>
         `;
         
-        // Show empty state in podium view
+        // Show empty state in podium view only
         const podiumEmptyState = document.createElement('div');
         podiumEmptyState.className = 'empty-state';
         podiumEmptyState.innerHTML = emptyStateHTML;
         podiumContainer.innerHTML = '';
         podiumContainer.appendChild(podiumEmptyState);
-        
-        // Show empty state in table view
-        const tableEmptyState = document.createElement('div');
-        tableEmptyState.className = 'empty-state';
-        tableEmptyState.innerHTML = emptyStateHTML;
-        leaderboardBody.innerHTML = '';
-        leaderboardBody.appendChild(tableEmptyState);
-        
-        // Setup view toggle even for empty state
-        this.setupViewToggle();
     }
 
     updateTournamentTitle() {
@@ -515,59 +601,10 @@ class TournamentLeaderboard {
                 month: 'long',
                 day: 'numeric'
             });
-            titleElement.textContent = `Battle Tournament - ${formattedDate}`;
+            titleElement.textContent = `Winter Championship 2025 - ${formattedDate}`;
         } else {
-            titleElement.textContent = 'Battle Tournament - Latest Standings';
+            titleElement.textContent = 'Winter Championship 2025 - Latest Standings';
         }
-    }
-
-    createLeaderboardEntry(player, index) {
-        const entry = document.createElement('div');
-        entry.className = 'leaderboard-entry';
-        
-        const rankClass = player.rank <= 3 ? `rank-${player.rank}` : '';
-        const medal = this.getMedalIcon(player.rank);
-        
-        entry.innerHTML = `
-            <div class="rank ${rankClass}">
-                ${medal}${player.rank}
-            </div>
-            <div class="player-name">
-                <div class="player-avatar">${this.getPlayerInitials(player.name)}</div>
-                <span>${this.escapeHtml(player.name)}</span>
-            </div>
-            <div class="score">
-                <div class="score-badge">${this.formatScore(player.score)}</div>
-            </div>
-            <div class="details-btn">
-                ${player.details ? 
-                    `<a href="https://github.com/${this.config.repo}/blob/main/${this.config.year}/${this.tournamentFolder || this.config.tournament}/${player.details}" 
-                       target="_blank" class="btn">
-                        <i class="fas fa-external-link-alt"></i>
-                        View
-                    </a>` : 
-                    '<span class="btn" style="opacity: 0.5; cursor: not-allowed;">No Details</span>'
-                }
-            </div>
-        `;
-        
-        return entry;
-    }
-
-    getMedalIcon(rank) {
-        switch (rank) {
-            case 1: return '<i class="fas fa-medal rank-medal" style="color: #ffd700;"></i>';
-            case 2: return '<i class="fas fa-medal rank-medal" style="color: #c0c0c0;"></i>';
-            case 3: return '<i class="fas fa-medal rank-medal" style="color: #cd7f32;"></i>';
-            default: return '';
-        }
-    }
-
-    getPlayerInitials(name) {
-        return name.split(' ')
-            .map(word => word.charAt(0).toUpperCase())
-            .join('')
-            .substring(0, 2);
     }
 
     formatScore(score) {
@@ -628,8 +665,22 @@ class TournamentLeaderboard {
     updateLastUpdated() {
         const lastUpdated = document.getElementById('lastUpdated');
         
-        if (this.currentDate) {
-            // Use the date from the data file
+        if (this.currentDate && this.currentTimestamp) {
+            // Use the date and timestamp from the data
+            const dataDate = new Date(this.currentDate);
+            const now = new Date();
+            const timestampDisplay = this.formatTimestamp(this.currentTimestamp);
+            
+            lastUpdated.textContent = `${dataDate.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            })} at ${timestampDisplay} (fetched at ${now.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+            })})`;
+        } else if (this.currentDate) {
+            // Fallback to just date
             const dataDate = new Date(this.currentDate);
             const now = new Date();
             lastUpdated.textContent = `${dataDate.toLocaleDateString('en-US', {
@@ -660,7 +711,7 @@ class TournamentLeaderboard {
             await this.discoverLatestTournament();
             await this.discoverAllAvailableDates();
             this.setupDateSelector();
-            await this.loadDataForSelectedDate();
+            await this.loadDataForSelectedDateTime();
         } catch (error) {
             console.error('Failed to refresh data:', error);
             this.showError(true);
